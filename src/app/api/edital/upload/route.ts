@@ -3,13 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { extractEditalContent } from '@/lib/gemini'
 
-// Dynamic import for pdf-parse to handle ESM/CJS compatibility
-async function parsePDF(buffer: Buffer): Promise<{ text: string }> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require('pdf-parse')
-  return pdfParse(buffer)
-}
-
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -43,18 +36,38 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer)
 
     // Extract text from PDF
-    const pdfData = await parsePDF(buffer)
-    const pdfText = pdfData.text
+    let pdfText: string
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require('pdf-parse')
+      const pdfData = await pdfParse(buffer)
+      pdfText = pdfData.text
+    } catch (pdfError) {
+      console.error('Erro ao extrair PDF:', pdfError)
+      return NextResponse.json(
+        { error: 'Erro ao ler o PDF. Tente um arquivo diferente ou verifique se não está protegido.' },
+        { status: 400 }
+      )
+    }
 
     if (!pdfText || pdfText.trim().length < 100) {
       return NextResponse.json(
-        { error: 'Não foi possível extrair texto do PDF. Verifique se o arquivo não está protegido ou escaneado.' },
+        { error: 'Não foi possível extrair texto do PDF. O arquivo pode estar escaneado ou protegido.' },
         { status: 400 }
       )
     }
 
     // Use Gemini to extract structured content
-    const extractedContent = await extractEditalContent(pdfText)
+    let extractedContent
+    try {
+      extractedContent = await extractEditalContent(pdfText)
+    } catch (aiError) {
+      console.error('Erro na API Gemini:', aiError)
+      return NextResponse.json(
+        { error: 'Erro ao analisar o edital com IA. Verifique sua chave de API do Gemini.' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       success: true,
@@ -62,9 +75,9 @@ export async function POST(request: NextRequest) {
       extracted: extractedContent
     })
   } catch (error) {
-    console.error('Erro ao processar edital:', error)
+    console.error('Erro geral ao processar edital:', error)
     return NextResponse.json(
-      { error: 'Erro ao processar o edital. Tente novamente.' },
+      { error: 'Erro inesperado ao processar o edital.' },
       { status: 500 }
     )
   }
