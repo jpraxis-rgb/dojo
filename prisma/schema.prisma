@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // User preferences
+  hoursWeekday      Float?    // Hours available on weekdays
+  hoursWeekend      Float?    // Hours available on weekends
+  preferredTime     String?   // morning, afternoon, night
+  sessionLength     Int?      // in minutes: 25, 60, 120
+  studyStyle        String?   // theory-first, exercise-first
+
+  // Relations
+  exam              Exam?
+}
+
+model Exam {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title         String
+  organization  String?   // Órgão
+  examDate      DateTime?
+  editalText    String?   @db.Text // Raw text extracted from PDF
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  subjects      Subject[]
+  studyPlan     StudyPlan?
+}
+
+model Subject {
+  id              String    @id @default(cuid())
+  examId          String
+  exam            Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  name            String
+  weight          Float?    // Weight/importance in the exam
+  knowledgeLevel  Int?      // 1-5 self-assessment
+  estimatedHours  Float?    // Total hours needed
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  topics          Topic[]
+  tasks           StudyTask[]
+}
+
+model Topic {
+  id              String    @id @default(cuid())
+  subjectId       String
+  subject         Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  name            String
+  estimatedHours  Float?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  tasks           StudyTask[]
+}
+
+model StudyPlan {
+  id            String    @id @default(cuid())
+  examId        String    @unique
+  exam          Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  generatedAt   DateTime  @default(now())
+
+  // Relations
+  tasks         StudyTask[]
+}
+
+model StudyTask {
+  id              String    @id @default(cuid())
+  studyPlanId     String
+  studyPlan       StudyPlan @relation(fields: [studyPlanId], references: [id], onDelete: Cascade)
+
+  subjectId       String
+  subject         Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  topicId         String?
+  topic           Topic?    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  date            DateTime  @db.Date
+  title           String
+  description     String?
+  durationMinutes Int
+  completed       Boolean   @default(false)
+  completedAt     DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([date])
+  @@index([completed])
+}
